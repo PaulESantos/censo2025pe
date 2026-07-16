@@ -1,15 +1,32 @@
 Package: censo2025pe
-Title: What the Package Does (One Line, Title Case)
+Title: Datos y Herramientas para el Censo Nacional 2025 de Peru
 Version: 0.0.0.9000
+LazyData: true
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Paul E.", "Santos Andrade", , "paulefrens@gmail.com", role = c("aut", "cre", "cph"), comment = c(ORCID = "0000-0002-6635-0375"))
+Description: Proporciona acceso ordenado (tidy data) a los resultados del
+    Censo Nacional 2025 de Peru del Instituto Nacional de Estadistica
+    e Informatica (INEI). Incluye funciones para extraer datos por unidades
+    censales (departamentos y provincias), generar reportes parametricos
+    automaticos en HTML/PDF y realizar comparaciones visuales y
+    estadisticas entre distintas circunscripciones territoriales.
 License: MIT + file LICENSE
+Imports: 
+    dplyr,
+    tidyr,
+    stringr,
+    ggplot2,
+    readxl,
+    rmarkdown,
+    knitr,
+    purrr,
+    scales
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
-URL: https://github.com/PaulESantos/censo2025pe
+URL: https://github.com/PaulESantos/censo2025pe, https://paulesantos.github.io/censo2025pe/
 BugReports: https://github.com/PaulESantos/censo2025pe/issues
+

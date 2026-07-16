@@ -1,0 +1,307 @@
+---
+title: "Reporte Estadístico del Censo Nacional 2025"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    css: !expr "system.file('reporte.css', package = 'censo2025pe')"
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+params:
+  unidad: "PERÚ"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(censo2025pe)
+
+# Estandarizar la unidad
+res_geo <- censo2025pe::buscar_unidad(params$unidad)
+nombre_unidad <- res_geo$nombre
+tipo_unidad <- res_geo$tipo
+```
+
+<div class="banner">
+  <h1>`r nombre_unidad`</h1>
+  <p class="subtitle">Resultados del Censo Nacional 2025: XIII de Población, VIII de Vivienda y IV de Comunidades Indígenas</p>
+  <p class="meta">Reporte de Análisis Territorial | Tipo de Unidad: `r toupper(tipo_unidad)`</p>
+</div>
+
+## 1. Demografía y Población
+
+La población censada de `r nombre_unidad` representa una unidad clave para el análisis territorial del país. A continuación se presentan los principales indicadores demográficos.
+
+```{r kpis, echo=FALSE}
+# Población Total
+df_pop <- censo2025pe::censo_educacion
+if (tipo_unidad == "nacional") {
+  df_pop <- df_pop[df_pop$departamento == "PERÚ" & df_pop$provincia == "Total" & df_pop$area == "Total" & df_pop$sexo == "Total" & df_pop$nivel_educativo == "total", ]
+} else if (tipo_unidad == "departamento") {
+  df_pop <- df_pop[df_pop$departamento == nombre_unidad & df_pop$provincia == "Total" & df_pop$area == "Total" & df_pop$sexo == "Total" & df_pop$nivel_educativo == "total", ]
+} else {
+  df_pop <- df_pop[df_pop$provincia == nombre_unidad & df_pop$area == "Total" & df_pop$sexo == "Total" & df_pop$nivel_educativo == "total", ]
+}
+
+pob_total <- sum(df_pop$poblacion, na.rm = TRUE)
+
+# Desglose por sexo
+df_sex <- censo2025pe::censo_educacion
+if (tipo_unidad == "nacional") {
+  df_sex <- df_sex[df_sex$departamento == "PERÚ" & df_sex$provincia == "Total" & df_sex$area == "Total" & df_sex$nivel_educativo == "total" & df_sex$sexo %in% c("Hombre", "Mujer"), ]
+} else if (tipo_unidad == "departamento") {
+  df_sex <- df_sex[df_sex$departamento == nombre_unidad & df_sex$provincia == "Total" & df_sex$area == "Total" & df_sex$nivel_educativo == "total" & df_sex$sexo %in% c("Hombre", "Mujer"), ]
+} else {
+  df_sex <- df_sex[df_sex$provincia == nombre_unidad & df_sex$area == "Total" & df_sex$nivel_educativo == "total" & df_sex$sexo %in% c("Hombre", "Mujer"), ]
+}
+
+pob_hombre <- sum(df_sex$poblacion[df_sex$sexo == "Hombre"], na.rm = TRUE)
+pob_mujer <- sum(df_sex$poblacion[df_sex$sexo == "Mujer"], na.rm = TRUE)
+
+pct_hombre <- pob_hombre / pob_total
+pct_mujer <- pob_mujer / pob_total
+```
+
+<div class="kpi-container">
+<div class="kpi-card">
+<div class="kpi-val">`r comma(pob_total)`</div>
+<div class="kpi-lbl">Población Censada (3+ años)</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-val">`r percent(pct_hombre, accuracy = 0.1)`</div>
+<div class="kpi-lbl">Hombres</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-val">`r percent(pct_mujer, accuracy = 0.1)`</div>
+<div class="kpi-lbl">Mujeres</div>
+</div>
+</div>
+
+### Pirámide Poblacional
+
+La pirámide demográfica muestra la distribución por edad y sexo en la unidad territorial analizada.
+
+```{r plot_piramide, fig.width=8, fig.height=5, echo=FALSE}
+tryCatch({
+  print(censo2025pe::plot_piramide_poblacion(nombre_unidad))
+}, error = function(e) {
+  cat("<p class='alert-msg'>Gráfico de pirámide poblacional no disponible para esta unidad censal.</p>")
+})
+```
+
+---
+
+## 2. Educación y Salud
+
+### Nivel Educativo Alcanzado
+
+La educación es un pilar fundamental para el desarrollo. El siguiente gráfico ilustra la distribución del nivel educativo máximo alcanzado por la población de 3 y más años de edad.
+
+```{r plot_edu, fig.width=8, fig.height=4, echo=FALSE}
+tryCatch({
+  print(censo2025pe::plot_educacion(nombre_unidad))
+}, error = function(e) {
+  cat("<p class='alert-msg'>Gráfico de educación no disponible.</p>")
+})
+```
+
+### Seguro de Salud
+
+La cobertura del seguro de salud muestra el nivel de aseguramiento de la población.
+
+```{r salud_table, echo=FALSE}
+df_salud <- censo2025pe::censo_seguro_salud
+if (tipo_unidad == "nacional") {
+  df_salud <- df_salud[df_salud$departamento == "PERÚ" & df_salud$provincia == "Total" & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+} else if (tipo_unidad == "departamento") {
+  df_salud <- df_salud[df_salud$departamento == nombre_unidad & df_salud$provincia == "Total" & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+} else {
+  df_salud <- df_salud[df_salud$provincia == nombre_unidad & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+}
+
+df_salud_tbl <- df_salud %>%
+  filter(tipo_seguro != "total") %>%
+  group_by(tipo_seguro) %>%
+  summarise(poblacion = sum(poblacion, na.rm = TRUE), .groups = "drop") %>%
+  mutate(porcentaje = poblacion / sum(poblacion)) %>%
+  arrange(desc(poblacion))
+
+seguro_labels <- c(
+  sis = "Seguro Integral de Salud (SIS)",
+  essalud = "EsSalud",
+  ffaa_policiales = "FF.AA. o Policía Nacional",
+  privado = "Seguro Privado de Salud",
+  otro = "Otro Seguro",
+  ninguno = "Ninguno"
+)
+
+df_salud_tbl$tipo_seguro <- seguro_labels[df_salud_tbl$tipo_seguro]
+colnames(df_salud_tbl) <- c("Tipo de Seguro", "Población", "Porcentaje")
+
+if (nrow(df_salud_tbl) > 0) {
+  df_salud_tbl$Población <- comma(df_salud_tbl$Población)
+  df_salud_tbl$Porcentaje <- percent(df_salud_tbl$Porcentaje, accuracy = 0.1)
+  kable(df_salud_tbl, caption = "Población afiliada por tipo de seguro de salud")
+} else {
+  cat("<p class='alert-msg'>Datos de seguro de salud no disponibles a nivel provincial.</p>")
+}
+```
+
+---
+
+## 3. Discapacidad y Autoidentificación Étnica
+
+### Discapacidad
+
+La tabla de prevalencia de dificultades físicas y mentales ayuda a identificar grupos vulnerables.
+
+```{r disc_table, echo=FALSE}
+df_disc <- censo2025pe::censo_discapacidad
+if (tipo_unidad == "nacional") {
+  df_disc <- df_disc[df_disc$departamento == "PERÚ" & df_disc$provincia == "Total" & df_disc$area == "Total" & df_disc$sexo == "Total", ]
+} else if (tipo_unidad == "departamento") {
+  df_disc <- df_disc[df_disc$departamento == nombre_unidad & df_disc$provincia == "Total" & df_disc$area == "Total" & df_disc$sexo == "Total", ]
+} else {
+  df_disc <- df_disc[df_disc$provincia == nombre_unidad & df_disc$area == "Total" & df_disc$sexo == "Total", ]
+}
+
+df_disc_tbl <- df_disc %>%
+  filter(tipo_discapacidad != "total") %>%
+  group_by(tipo_discapacidad) %>%
+  summarise(poblacion = sum(poblacion, na.rm = TRUE), .groups = "drop") %>%
+  mutate(porcentaje = poblacion / sum(poblacion)) %>%
+  arrange(desc(poblacion))
+
+disc_labels <- c(
+  ver = "Dificultad para Ver",
+  oir = "Dificultad para Oír",
+  hablar = "Dificultad para Hablar",
+  caminar = "Dificultad para Caminar/Moverse",
+  usar_brazos_manos = "Dificultad para Usar brazos/manos",
+  recordar_concentrarse = "Dificultad para Recordar/Concentrarse",
+  relacionarse_demas = "Dificultad para Relacionarse",
+  ninguna = "Ninguna Dificultad"
+)
+
+df_disc_tbl$tipo_discapacidad <- disc_labels[df_disc_tbl$tipo_discapacidad]
+colnames(df_disc_tbl) <- c("Condición / Tipo de Dificultad", "Población", "Porcentaje")
+
+if (nrow(df_disc_tbl) > 0) {
+  df_disc_tbl$Población <- comma(df_disc_tbl$Población)
+  df_disc_tbl$Porcentaje <- percent(df_disc_tbl$Porcentaje, accuracy = 0.1)
+  kable(df_disc_tbl, caption = "Población según dificultades físicas y cognitivas")
+} else {
+  cat("<p class='alert-msg'>Datos de discapacidad no disponibles a nivel provincial.</p>")
+}
+```
+
+### Autoidentificación Étnica
+
+La diversidad cultural es uno de los mayores patrimonios del país.
+
+```{r plot_etn, fig.width=8, fig.height=4, echo=FALSE}
+tryCatch({
+  print(censo2025pe::plot_etnicidad(nombre_unidad))
+}, error = function(e) {
+  cat("<p class='alert-msg'>Datos de etnicidad no disponibles a nivel provincial.</p>")
+})
+```
+
+---
+
+## 4. Características de la Vivienda y el Hogar
+
+### Viviendas Particulares
+
+Distribución de las viviendas según su tipo y condición de ocupación.
+
+```{r viv_table, echo=FALSE}
+df_viv <- censo2025pe::censo_vivienda
+if (tipo_unidad == "nacional") {
+  df_viv <- df_viv[df_viv$departamento == "PERÚ" & df_viv$provincia == "Total" & df_viv$area == "Total", ]
+} else if (tipo_unidad == "departamento") {
+  df_viv <- df_viv[df_viv$departamento == nombre_unidad & df_viv$provincia == "Total" & df_viv$area == "Total", ]
+} else {
+  df_viv <- df_viv[df_viv$provincia == nombre_unidad & df_viv$area == "Total", ]
+}
+
+df_viv_tbl <- df_viv %>%
+  filter(tipo_vivienda != "Total", condicion_ocupacion == "total") %>%
+  group_by(tipo_vivienda) %>%
+  summarise(cantidad = sum(valor, na.rm = TRUE), .groups = "drop") %>%
+  mutate(porcentaje = cantidad / sum(cantidad)) %>%
+  arrange(desc(cantidad))
+
+colnames(df_viv_tbl) <- c("Tipo de Vivienda Particular", "Total Viviendas", "Porcentaje")
+
+if (nrow(df_viv_tbl) > 0) {
+  df_viv_tbl$`Total Viviendas` <- comma(df_viv_tbl$`Total Viviendas`)
+  df_viv_tbl$Porcentaje <- percent(df_viv_tbl$Porcentaje, accuracy = 0.1)
+  kable(df_viv_tbl, caption = "Tipos de viviendas particulares censadas")
+} else {
+  cat("<p class='alert-msg'>Datos de vivienda no disponibles.</p>")
+}
+```
+
+### Abastecimiento de Agua
+
+```{r plot_agua, fig.width=8, fig.height=4, echo=FALSE}
+tryCatch({
+  print(censo2025pe::plot_servicios_agua(nombre_unidad))
+}, error = function(e) {
+  cat("<p class='alert-msg'>Datos de servicios de agua no disponibles.</p>")
+})
+```
+
+### Equipamiento Tecnológico y del Hogar
+
+Tenencia de bienes del hogar.
+
+```{r equip_table, echo=FALSE}
+df_eq <- censo2025pe::censo_hogar_equipamiento
+if (tipo_unidad == "nacional") {
+  df_eq <- df_eq[df_eq$departamento == "PERÚ" & df_eq$provincia == "Total" & df_eq$area == "Total" & df_eq$tipo_vivienda == "Total" & df_eq$indicador == "Hogares", ]
+} else if (tipo_unidad == "departamento") {
+  df_eq <- df_eq[df_eq$departamento == nombre_unidad & df_eq$provincia == "Total" & df_eq$area == "Total" & df_eq$tipo_vivienda == "Total" & df_eq$indicador == "Hogares", ]
+} else {
+  df_eq <- df_eq[df_eq$provincia == nombre_unidad & df_eq$area == "Total" & df_eq$tipo_vivienda == "Total" & df_eq$indicador == "Hogares", ]
+}
+
+df_eq_tbl <- df_eq %>%
+  filter(equipo_hogar != "total") %>%
+  group_by(equipo_hogar) %>%
+  summarise(hogares = sum(valor, na.rm = TRUE), .groups = "drop") %>%
+  mutate(porcentaje = hogares / sum(hogares)) %>%
+  arrange(desc(hogares))
+
+equip_labels <- c(
+  radio = "Radio",
+  equipo_sonido = "Equipo de Sonido",
+  televisor = "Televisor",
+  cocina_gas = "Cocina a Gas",
+  horno_microondas = "Horno Microondas",
+  refrigeradora = "Refrigeradora/Congeladora",
+  lavadora = "Lavadora",
+  computadora = "Computadora de Escritorio",
+  laptop = "Laptop/Notebook",
+  tableta = "Tablet/Tableta",
+  ninguno = "Ningún Artefacto"
+)
+
+df_eq_tbl$equipo_hogar <- equip_labels[df_eq_tbl$equipo_hogar]
+colnames(df_eq_tbl) <- c("Equipamiento/Artefacto", "Cantidad de Hogares", "Porcentaje")
+
+if (nrow(df_eq_tbl) > 0) {
+  df_eq_tbl$`Cantidad de Hogares` <- comma(df_eq_tbl$`Cantidad de Hogares`)
+  df_eq_tbl$Porcentaje <- percent(df_eq_tbl$Porcentaje, accuracy = 0.1)
+  kable(df_eq_tbl, caption = "Tenencia de equipamiento en los hogares")
+} else {
+  cat("<p class='alert-msg'>Datos de equipamiento del hogar no disponibles para esta unidad territorial.</p>")
+}
+```

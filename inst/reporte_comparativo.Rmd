@@ -1,0 +1,280 @@
+---
+title: "Reporte Comparativo - Censo Nacional 2025"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    css: !expr "system.file('reporte.css', package = 'censo2025pe')"
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+params:
+  unidades: !r c("AMAZONAS", "AREQUIPA")
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(purrr)
+library(tidyr)
+library(censo2025pe)
+
+unidades_list <- params$unidades
+```
+
+<div class="banner">
+  <h1>Análisis Comparativo Territorial</h1>
+  <p class="subtitle">Comparación de indicadores clave del Censo Nacional 2025 de Perú</p>
+  <p class="meta">Unidades Comparadas: `r paste(unidades_list, collapse = " vs ")`</p>
+</div>
+
+## 1. Comparación de Población
+
+A continuación se compara el volumen de la población censada de 3 y más años de edad entre las unidades seleccionadas.
+
+```{r kpis_comp, echo=FALSE}
+# Cargar datos de educación para población
+df_edu <- censo2025pe::censo_educacion
+
+# Obtener población total de cada unidad
+pob_totals <- map_df(unidades_list, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  if (res_geo$tipo == "nacional") {
+    df_uni <- df_edu[df_edu$departamento == "PERÚ" & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$sexo == "Total" & df_edu$nivel_educativo == "total", ]
+  } else if (res_geo$tipo == "departamento") {
+    df_uni <- df_edu[df_edu$departamento == res_geo$nombre & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$sexo == "Total" & df_edu$nivel_educativo == "total", ]
+  } else {
+    df_uni <- df_edu[df_edu$provincia == res_geo$nombre & df_edu$area == "Total" & df_edu$sexo == "Total" & df_edu$nivel_educativo == "total", ]
+  }
+  
+  # Desglose por sexo
+  if (res_geo$tipo == "nacional") {
+    df_sex <- df_edu[df_edu$departamento == "PERÚ" & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$nivel_educativo == "total" & df_edu$sexo %in% c("Hombre", "Mujer"), ]
+  } else if (res_geo$tipo == "departamento") {
+    df_sex <- df_edu[df_edu$departamento == res_geo$nombre & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$nivel_educativo == "total" & df_edu$sexo %in% c("Hombre", "Mujer"), ]
+  } else {
+    df_sex <- df_edu[df_edu$provincia == res_geo$nombre & df_edu$area == "Total" & df_edu$nivel_educativo == "total" & df_edu$sexo %in% c("Hombre", "Mujer"), ]
+  }
+  
+  tot <- sum(df_uni$poblacion, na.rm = TRUE)
+  tot_h <- sum(df_sex$poblacion[df_sex$sexo == "Hombre"], na.rm = TRUE)
+  tot_m <- sum(df_sex$poblacion[df_sex$sexo == "Mujer"], na.rm = TRUE)
+  
+  tibble(
+    Unidad = res_geo$nombre,
+    Tipo = toupper(res_geo$tipo),
+    `Población Total` = tot,
+    Hombres = tot_h,
+    Mujeres = tot_m
+  )
+})
+
+# Graficar comparación de población total
+ggplot(pob_totals, aes(x = reorder(Unidad, `Población Total`), y = `Población Total`, fill = Unidad)) +
+  geom_col(show.legend = FALSE, fill = "#1E3A8A", width = 0.5) +
+  scale_y_continuous(labels = comma) +
+  coord_flip() +
+  labs(
+    title = "Población Censada de 3 y más años de edad",
+    x = "Unidad Censal",
+    y = "Población"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 12))
+
+# Tabla comparativa
+pob_totals_tbl <- pob_totals %>%
+  mutate(
+    `Población Total` = comma(`Población Total`),
+    Hombres = paste0(comma(Hombres), " (", percent(Hombres / as.numeric(gsub(",", "", `Población Total`)), accuracy = 0.1), ")"),
+    Mujeres = paste0(comma(Mujeres), " (", percent(Mujeres / as.numeric(gsub(",", "", `Población Total`)), accuracy = 0.1), ")")
+  )
+
+kable(pob_totals_tbl, caption = "Resumen comparativo de población por sexo")
+```
+
+---
+
+## 2. Nivel Educativo Alcanzado
+
+Comparación de la distribución del nivel educativo máximo alcanzado (en porcentajes).
+
+```{r comp_edu, fig.width=9, fig.height=5, echo=FALSE}
+df_edu_all <- map_df(unidades_list, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  if (res_geo$tipo == "nacional") {
+    df_uni <- df_edu[df_edu$departamento == "PERÚ" & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$sexo == "Total", ]
+  } else if (res_geo$tipo == "departamento") {
+    df_uni <- df_edu[df_edu$departamento == res_geo$nombre & df_edu$provincia == "Total" & df_edu$area == "Total" & df_edu$sexo == "Total", ]
+  } else {
+    df_uni <- df_edu[df_edu$provincia == res_geo$nombre & df_edu$area == "Total" & df_edu$sexo == "Total", ]
+  }
+  
+  df_uni %>%
+    filter(nivel_educativo != "total") %>%
+    group_by(nivel_educativo) %>%
+    summarise(poblacion = sum(poblacion, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      Unidad = res_geo$nombre,
+      porcentaje = poblacion / sum(poblacion)
+    )
+})
+
+edu_labels <- c(
+  sin_nivel = "Sin Nivel",
+  inicial = "Inicial",
+  primaria = "Primaria",
+  secundaria = "Secundaria",
+  basica_especial = "Básica Especial",
+  sup_no_univ_incompleta = "Sup. No Univ. Incorp.",
+  sup_no_univ_completa = "Sup. No Univ. Compl.",
+  sup_univ_incompleta = "Sup. Univ. Incorp.",
+  sup_univ_completa = "Sup. Univ. Compl.",
+  maestria_doctorado = "Posgrado"
+)
+
+df_edu_all$nivel_label <- edu_labels[df_edu_all$nivel_educativo]
+df_edu_all <- na.omit(df_edu_all)
+
+# Solo graficar niveles agregados para que sea más legible
+df_edu_plot <- df_edu_all %>%
+  filter(nivel_educativo %in% c("primaria", "secundaria", "sup_no_univ_completa", "sup_univ_completa", "maestria_doctorado"))
+
+ggplot(df_edu_plot, aes(x = nivel_label, y = porcentaje, fill = Unidad)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    title = "Comparación de Nivel Educativo Alcanzado",
+    subtitle = "Porcentaje de la población de 3 y más años en los niveles principales",
+    x = "Nivel Educativo",
+    y = "Porcentaje",
+    fill = "Unidad Censal"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+---
+
+## 3. Seguro de Salud
+
+Comparación de cobertura de seguros de salud principales (SIS y EsSalud).
+
+```{r comp_salud, echo=FALSE}
+df_salud <- censo2025pe::censo_seguro_salud
+
+df_salud_all <- map_df(unidades_list, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  if (res_geo$tipo == "nacional") {
+    df_uni <- df_salud[df_salud$departamento == "PERÚ" & df_salud$provincia == "Total" & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+  } else if (res_geo$tipo == "departamento") {
+    df_uni <- df_salud[df_salud$departamento == res_geo$nombre & df_salud$provincia == "Total" & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+  } else {
+    df_uni <- df_salud[df_salud$provincia == res_geo$nombre & df_salud$area == "Total" & df_salud$sexo == "Total", ]
+  }
+  
+  if (nrow(df_uni) > 0) {
+    df_uni %>%
+      filter(tipo_seguro != "total") %>%
+      group_by(tipo_seguro) %>%
+      summarise(poblacion = sum(poblacion, na.rm = TRUE), .groups = "drop") %>%
+      mutate(
+        Unidad = res_geo$nombre,
+        porcentaje = poblacion / sum(poblacion)
+      )
+  } else {
+    NULL
+  }
+})
+
+if (!is.null(df_salud_all) && nrow(df_salud_all) > 0) {
+  seguro_labels <- c(
+    sis = "SIS",
+    essalud = "EsSalud",
+    ffaa_policiales = "FF.AA./PNP",
+    privado = "Privado",
+    otro = "Otro",
+    ninguno = "Ninguno"
+  )
+  
+  df_salud_all$tipo_seguro <- seguro_labels[df_salud_all$tipo_seguro]
+  
+  df_salud_wide <- df_salud_all %>%
+    select(Unidad, tipo_seguro, porcentaje) %>%
+    pivot_wider(names_from = Unidad, values_from = porcentaje, values_fill = 0)
+  
+  # Formatear porcentajes
+  df_salud_wide_fmt <- df_salud_wide %>%
+    mutate(across(-tipo_seguro, percent, accuracy = 0.1))
+  
+  colnames(df_salud_wide_fmt)[1] <- "Tipo de Seguro"
+  kable(df_salud_wide_fmt, caption = "Comparación porcentual de afiliación a seguros de salud")
+} else {
+  cat("<p class='alert-msg'>Datos de seguros de salud no disponibles para la comparación en este nivel geográfico.</p>")
+}
+```
+
+---
+
+## 4. Servicios Básicos (Acceso a Red Pública de Agua)
+
+Comparación del porcentaje de viviendas que acceden a agua por red pública.
+
+```{r comp_agua, echo=FALSE}
+df_serv <- censo2025pe::censo_servicios
+
+df_agua_all <- map_df(unidades_list, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  if (res_geo$tipo == "nacional") {
+    df_uni <- df_serv[df_serv$departamento == "PERÚ" & df_serv$provincia == "Total" & df_serv$area == "Total" & df_serv$tipo_vivienda == "Total" & df_serv$indicador == "Viviendas particulares", ]
+  } else if (res_geo$tipo == "departamento") {
+    df_uni <- df_serv[df_serv$departamento == res_geo$nombre & df_serv$provincia == "Total" & df_serv$area == "Total" & df_serv$tipo_vivienda == "Total" & df_serv$indicador == "Viviendas particulares", ]
+  } else {
+    df_uni <- df_serv[df_serv$provincia == res_geo$nombre & df_serv$area == "Total" & df_serv$tipo_vivienda == "Total" & df_serv$indicador == "Viviendas particulares", ]
+  }
+  
+  df_uni %>%
+    filter(procedencia_agua != "total") %>%
+    group_by(procedencia_agua) %>%
+    summarise(viviendas = sum(valor, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      Unidad = res_geo$nombre,
+      porcentaje = viviendas / sum(viviendas)
+    )
+})
+
+agua_labels <- c(
+  red_publica = "Red Pública",
+  pilon_pileta = "Pilón/Pileta",
+  camion_cisterna = "Camión-Cisterna",
+  pozo = "Pozo",
+  manantial = "Manantial",
+  rio_acequia = "Río/Acequia",
+  otro = "Otro"
+)
+
+df_agua_all$agua_label <- agua_labels[df_agua_all$procedencia_agua]
+
+# Graficar
+ggplot(df_agua_all, aes(x = agua_label, y = porcentaje, fill = Unidad)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Comparación de Procedencia del Agua en la Vivienda",
+    x = "Procedencia del agua",
+    y = "Porcentaje de Viviendas",
+    fill = "Unidad Censal"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
