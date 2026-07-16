@@ -52,8 +52,8 @@ Puedes instalar la versión de desarrollo de `censo2025pe` desde GitHub
 con:
 
 ``` r
-# install.packages("devtools")
-devtools::install_github("PaulESantos/censo2025pe")
+# install.packages("pak")
+pak::pak("PaulESantos/censo2025pe")
 ```
 
 ------------------------------------------------------------------------
