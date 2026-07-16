@@ -137,7 +137,95 @@ plot_piramide_poblacion("AMAZONAS")
 
 ![](reference/figures/README-plot_example-1.png)
 
-### 4. Generación de Reportes Automáticos
+### 4. Comparación de Unidades Territoriales
+
+El paquete permite contrastar indicadores entre distintas
+circunscripciones. A continuación se presenta un ejemplo comparando la
+población y el nivel educativo entre **Amazonas** y **Arequipa**:
+
+``` r
+
+library(purrr)
+library(tidyr)
+library(knitr)
+
+unidades_a_comparar <- c("AMAZONAS", "AREQUIPA")
+
+# 1. Comparativo de Población por Sexo
+pob_comp <- map_df(unidades_a_comparar, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  df_sex <- censo_educacion %>% 
+    filter(departamento == res_geo$nombre, provincia == "Total", area == "Total", nivel_educativo == "total", sexo %in% c("Hombre", "Mujer"))
+  
+  tot <- sum(df_sex$poblacion)
+  tot_h <- sum(df_sex$poblacion[df_sex$sexo == "Hombre"])
+  tot_m <- sum(df_sex$poblacion[df_sex$sexo == "Mujer"])
+  
+  tibble(
+    Unidad = res_geo$nombre,
+    `Población Total` = tot,
+    Hombres = tot_h,
+    Mujeres = tot_m
+  )
+})
+
+kable(pob_comp, format = "markdown", col.names = c("Región/Unidad", "Población Total", "Hombres", "Mujeres"))
+```
+
+| Región/Unidad | Población Total | Hombres | Mujeres |
+|:--------------|----------------:|--------:|--------:|
+| AMAZONAS      |          429040 |  214913 |  214127 |
+| AREQUIPA      |         1688010 |  840161 |  847849 |
+
+También podemos visualizar comparativamente la distribución porcentual
+de los niveles educativos alcanzados:
+
+``` r
+
+library(ggplot2)
+# 2. Comparativo de Nivel Educativo
+edu_comp <- map_df(unidades_a_comparar, function(uni) {
+  res_geo <- buscar_unidad(uni)
+  censo_educacion %>%
+    filter(departamento == res_geo$nombre, provincia == "Total", area == "Total", sexo == "Total", nivel_educativo != "total") %>%
+    group_by(nivel_educativo) %>%
+    summarise(poblacion = sum(poblacion), .groups = "drop") %>%
+    mutate(
+      Unidad = res_geo$nombre,
+      porcentaje = poblacion / sum(poblacion)
+    )
+})
+
+edu_labels <- c(
+  primaria = "Primaria",
+  secundaria = "Secundaria",
+  sup_no_univ_completa = "Sup. No Univ. Completa",
+  sup_univ_completa = "Sup. Univ. Completa"
+)
+
+edu_comp_f <- edu_comp %>%
+  filter(nivel_educativo %in% names(edu_labels)) %>%
+  mutate(nivel_label = edu_labels[nivel_educativo])
+
+ggplot(edu_comp_f, aes(x = nivel_label, y = porcentaje, fill = Unidad)) +
+  geom_col(position = "dodge", width = 0.6) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("AMAZONAS" = "#3B82F6", "AREQUIPA" = "#F59E0B")) +
+  theme_minimal() +
+  labs(
+    title = "Comparación de Nivel Educativo Alcanzado",
+    subtitle = "Porcentaje de población según nivel máximo alcanzado",
+    x = "Nivel Educativo",
+    y = "Porcentaje",
+    fill = "Región"
+  )
+```
+
+![](reference/figures/README-comparative_plot-1.png)
+
+------------------------------------------------------------------------
+
+### 5. Generación de Reportes Automáticos
 
 Puedes compilar informes ejecutivos en HTML (con estilos premium
 incorporados) o PDF:
