@@ -42,8 +42,8 @@ con:
 
 ``` r
 
-# install.packages("devtools")
-devtools::install_github("PaulESantos/censo2025pe")
+# install.packages("pak")
+pak::pak("PaulESantos/censo2025pe")
 ```
 
 ------------------------------------------------------------------------
